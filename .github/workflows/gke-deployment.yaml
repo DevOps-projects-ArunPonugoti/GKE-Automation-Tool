@@ -1,0 +1,82 @@
+name: Deploy GKE Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: 'Project Name'
+        required: true
+      project_id:
+        description: 'GCP Project ID'
+        required: true
+      region:
+        description: 'GCP Region'
+        required: true
+      zone:
+        description: 'GCP Zone'
+        required: true
+      environment:
+        description: 'Environment'
+        required: true
+      machine_type:
+        description: 'Machine Type'
+        required: true
+      network_tier:
+        description: 'Network Tier'
+        required: true
+
+env:
+  TF_WORKSPACE: ${{ github.event.inputs.environment }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: "1.0.0"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Initialize Terraform
+        run: |
+          cd terraform
+          terraform init
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Terraform Format
+        run: |
+          cd terraform
+          terraform fmt -check
+
+      - name: Terraform Plan
+        run: |
+          cd terraform
+          terraform plan -var="project_id=${{ github.event.inputs.project_id }}" \
+                        -var="project_name=${{ github.event.inputs.project_name }}" \
+                        -var="region=${{ github.event.inputs.region }}" \
+                        -var="zone=${{ github.event.inputs.zone }}" \
+                        -var="environment=${{ github.event.inputs.environment }}" \
+                        -var="machine_type=${{ github.event.inputs.machine_type }}" \
+                        -var="network_tier=${{ github.event.inputs.network_tier }}" \
+                        -out=tfplan
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Terraform Apply
+        run: |
+          cd terraform
+          terraform apply -auto-approve tfplan
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
